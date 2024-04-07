@@ -1,0 +1,57 @@
+--
+-- Account Balance Update Trigger:
+--
+CREATE TRIGGER update_balance
+AFTER INSERT OR UPDATE ON Transactions
+FOR EACH ROW
+BEGIN
+   UPDATE Accounts
+   SET balance = balance + NEW.amount
+   WHERE account_number = NEW.account_number;
+END;
+
+
+--
+-- Transaction Limit Check Trigger:
+--
+CREATE TRIGGER check_transaction_limit
+BEFORE INSERT ON Transactions
+FOR EACH ROW
+BEGIN
+   IF NEW.amount > (SELECT max_transaction_limit FROM AccountTypes WHERE type_id = NEW.account_type_id) THEN
+      SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Transaction amount exceeds limit';
+   END IF;
+END;
+
+--
+-- Account Closure Trigger:
+--
+
+CREATE TRIGGER close_account
+AFTER UPDATE ON Accounts
+FOR EACH ROW
+BEGIN
+   IF NEW.balance < (SELECT min_balance FROM AccountTypes WHERE type_id = NEW.account_type_id) THEN
+      UPDATE Accounts
+      SET status = 'Closed'
+      WHERE account_number = NEW.account_number;
+   END IF;
+END;
+
+--
+-- Audit Trail Trigger:
+--
+
+CREATE TRIGGER audit_trail
+AFTER INSERT, UPDATE, DELETE ON Accounts, Customers, Transactions
+FOR EACH ROW
+BEGIN
+   INSERT INTO AuditTrail (table_name, action, timestamp)
+   VALUES (IFNULL(NEW.table_name, OLD.table_name), 'INSERT, UPDATE, or DELETE', NOW());
+END;
+
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
